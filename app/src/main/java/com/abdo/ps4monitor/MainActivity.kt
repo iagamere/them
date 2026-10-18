@@ -7,7 +7,9 @@ import android.os.Bundle
 import android.app.Activity
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -51,7 +53,15 @@ class MainActivity : ComponentActivity() {
     val ctx = LocalContext.current
     // A chosen PS4 theme wins (Settings > PS4 theme); else phone (Material You) colours when available and enabled; otherwise a purple fallback.
     val ps4Theme = ThemeStore.active.value
-    val themed = remember(ps4Theme, dark) { ps4Theme?.let { ThemeScheme.build(it.toSeed(), dark).toColorScheme() } }
+    val wall = ThemeStore.wall.value                       // the theme's wallpaper (drawn behind the whole app), or null
+    val themed = remember(ps4Theme, dark, wall != null) {
+        ps4Theme?.let { t ->
+            val c = ThemeScheme.build(t.toSeed(), dark).toColorScheme()
+            // over a wallpaper the cards are slightly see-through so the picture shows through them; dialogs and sheets (High / Highest) stay solid
+            if (wall != null) c.copy(surfaceContainerLowest = c.surfaceContainerLowest.copy(alpha = 0.80f), surfaceContainerLow = c.surfaceContainerLow.copy(alpha = 0.84f),
+                surfaceContainer = c.surfaceContainer.copy(alpha = 0.90f)) else c
+        }
+    }
     val cs = if (themed != null) themed
              else if (Store.dynamic.value && Build.VERSION.SDK_INT >= 31) { if (dark) dynamicDarkColorScheme(ctx) else dynamicLightColorScheme(ctx) }
              else if (dark) darkColorScheme(primary = Color(0xFFCFBCFF), secondary = Color(0xFFCCC2DC), tertiary = Color(0xFFEFB8C8))
@@ -62,9 +72,19 @@ class MainActivity : ComponentActivity() {
         w.statusBarColor = cs.surface.toArgb(); w.navigationBarColor = cs.surfaceContainer.toArgb()
         WindowCompat.getInsetsController(w, view).apply { isAppearanceLightStatusBars = !dark; isAppearanceLightNavigationBars = !dark }
     }
-    val shapes = Shapes(small = RoundedCornerShape(10.dp), medium = RoundedCornerShape(16.dp), large = RoundedCornerShape(20.dp), extraLarge = RoundedCornerShape(28.dp))
+    // PS4 look: the console's interface is made of sharp rectangles, so a theme with "PS4 style" switches the corners to nearly square
+    val shapes = if (ps4Theme?.sharp == true) Shapes(small = RoundedCornerShape(2.dp), medium = RoundedCornerShape(3.dp), large = RoundedCornerShape(4.dp), extraLarge = RoundedCornerShape(6.dp))
+                 else Shapes(small = RoundedCornerShape(10.dp), medium = RoundedCornerShape(16.dp), large = RoundedCornerShape(20.dp), extraLarge = RoundedCornerShape(28.dp))
     CompositionLocalProvider(LocalLayoutDirection provides if (Lang.isAr) LayoutDirection.Rtl else LayoutDirection.Ltr) {
-        MaterialTheme(colorScheme = cs, shapes = shapes) { Surface(Modifier.fillMaxSize(), color = cs.surface) { AppNav() } }
+        MaterialTheme(colorScheme = cs, shapes = shapes) {
+            Box(Modifier.fillMaxSize().background(cs.surface)) {
+                if (wall != null) {
+                    Image(wall, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                    Box(Modifier.fillMaxSize().background(cs.surface.copy(alpha = ps4Theme?.dim ?: 0.78f)))      // dims the picture so text stays readable
+                }
+                Surface(Modifier.fillMaxSize(), color = if (wall != null) Color.Transparent else cs.surface, contentColor = cs.onSurface) { AppNav() }
+            }
+        }
     }
 }
 
@@ -78,7 +98,7 @@ private val TABS = listOf(Triple("home", R.drawable.ic_home, "Home" to "الرئ
     val topLevel = TABS.any { it.first == route }
     val active by DownloadRepo.all.collectAsState()
     val activeCount = active.count { it.state.active }
-    Scaffold(bottomBar = {
+    Scaffold(containerColor = if (ThemeStore.wall.value != null) Color.Transparent else MaterialTheme.colorScheme.background, contentColor = MaterialTheme.colorScheme.onBackground, bottomBar = {
         if (topLevel) NavigationBar {
             TABS.forEach { (r, icon, label) ->
                 NavigationBarItem(selected = route == r, label = { Lbl(tr(label.first, label.second), style = MaterialTheme.typography.labelMedium) },

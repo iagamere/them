@@ -41,36 +41,57 @@ private fun displayName(ctx: Context, uri: Uri): String = runCatching {
     ctx.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
 }.getOrNull() ?: uri.lastPathSegment?.substringAfterLast('/') ?: "Theme"
 
-/** A small mock of the app (surface, card with progress, buttons) drawn with the scheme this theme would give, so the result is seen BEFORE it is applied. */
-@Composable private fun ThemePreview(p: ThemeProfile) {
+/** A small mock of the app (wallpaper, cards with progress, buttons) drawn with the scheme and look this theme would give, so the result is seen BEFORE it is applied. */
+@Composable private fun ThemePreview(p: ThemeProfile, wallpaper: Bitmap?) {
     val dark = appDark()
-    val cs = remember(p, dark) { ThemeScheme.build(p.toSeed(), dark).toColorScheme() }
-    val shapes = MaterialTheme.shapes; val typo = MaterialTheme.typography
-    MaterialTheme(colorScheme = cs, shapes = shapes, typography = typo) {
-        Surface(Modifier.fillMaxWidth(), color = cs.surface, shape = shapes.large, border = BorderStroke(1.dp, cs.outlineVariant)) {
+    val showWall = p.useWall && wallpaper != null
+    val cs0 = remember(p, dark) { ThemeScheme.build(p.toSeed(), dark).toColorScheme() }
+    val cs = if (showWall) cs0.copy(surfaceContainerHigh = cs0.surfaceContainerHigh.copy(alpha = 0.86f)) else cs0
+    val sharp = if (p.sharp) Shapes(small = RoundedCornerShape(2.dp), medium = RoundedCornerShape(3.dp), large = RoundedCornerShape(4.dp), extraLarge = RoundedCornerShape(6.dp)) else MaterialTheme.shapes
+    val typo = MaterialTheme.typography
+    MaterialTheme(colorScheme = cs, shapes = sharp, typography = typo) {
+        val shapes = MaterialTheme.shapes
+        Box(Modifier.fillMaxWidth().clip(shapes.large).background(cs.surface).border(1.dp, cs.outlineVariant, shapes.large)) {
+            if (showWall) {
+                Image(wallpaper!!.asImageBitmap(), null, Modifier.matchParentSize(), contentScale = ContentScale.Crop)
+                Box(Modifier.matchParentSize().background(cs.surface.copy(alpha = p.dim)))
+            }
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(p.name, style = typo.titleMedium, fontWeight = FontWeight.SemiBold, color = cs.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Card(Modifier.fillMaxWidth(), shape = shapes.large, colors = CardDefaults.cardColors(containerColor = cs.surfaceContainerHigh)) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(tr("Downloading", "جارٍ التحميل") + "  62%", color = cs.onSurface)
-                        LinearProgressIndicator(progress = { 0.62f }, Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)), color = cs.primary, trackColor = cs.primary.copy(alpha = 0.22f))
+                        LinearProgressIndicator(progress = { 0.62f }, Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(if (p.sharp) 1.dp else 3.dp)), color = cs.primary, trackColor = cs.primary.copy(alpha = 0.22f))
                         Text("4.1 MB/s  •  ETA 12:40", style = typo.bodySmall, color = cs.onSurfaceVariant)
                     }
                 }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = {}) { Lbl(tr("Pause", "إيقاف مؤقت")) }
-                    FilledTonalButton(onClick = {}) { Lbl(tr("Files", "الملفات")) }
+                    Button(onClick = {}, shape = shapes.small) { Lbl(tr("Pause", "إيقاف مؤقت")) }
+                    FilledTonalButton(onClick = {}, shape = shapes.small) { Lbl(tr("Files", "الملفات")) }
                     FilterChip(selected = true, onClick = {}, label = { Lbl(tr("Selected", "محدد")) })
-                    AssistChip(onClick = {}, label = { Lbl(tr("Chip", "شريحة")) })
                 }
                 Card(Modifier.fillMaxWidth(), shape = shapes.large, colors = CardDefaults.cardColors(containerColor = cs.primaryContainer)) {
                     Text(tr("Primary container", "حاوية أساسية"), Modifier.padding(12.dp), color = cs.onPrimaryContainer)
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Surface(shape = shapes.small, color = cs.secondaryContainer) { Text(tr("Secondary", "ثانوي"), Modifier.padding(horizontal = 10.dp, vertical = 6.dp), color = cs.onSecondaryContainer, style = typo.labelMedium) }
-                    Surface(shape = shapes.small, color = cs.tertiaryContainer) { Text(tr("Tertiary", "ثالثي"), Modifier.padding(horizontal = 10.dp, vertical = 6.dp), color = cs.onTertiaryContainer, style = typo.labelMedium) }
-                }
             }
+        }
+    }
+}
+
+/** What to show: the wallpaper (when the theme has one), PS4-style sharp corners, and how strongly the wallpaper is dimmed. */
+@Composable private fun LookOptions(p: ThemeProfile, onChange: (ThemeProfile) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (p.wall) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.weight(1f)) { Text(tr("Theme wallpaper behind the app", "خلفية الثيم خلف التطبيق")); Dim(tr("Cards become slightly see-through", "تصبح البطاقات شبه شفافة قليلًا")) }
+            Switch(p.useWall, { onChange(p.copy(useWall = it)) })
+        }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.weight(1f)) { Text(tr("PS4 style corners", "حواف بنمط PS4")); Dim(tr("Sharp rectangles like the console's interface", "مستطيلات حادة مثل واجهة الجهاز")) }
+            Switch(p.sharp, { onChange(p.copy(sharp = it)) })
+        }
+        if (p.wall && p.useWall) {
+            Text(tr("Wallpaper dimming", "تعتيم الخلفية") + "  ${(p.dim * 100).toInt()}%")
+            Slider(p.dim, { onChange(p.copy(dim = it)) }, valueRange = 0.5f..0.95f)
         }
     }
 }
@@ -103,11 +124,8 @@ private fun displayName(ctx: Context, uri: Uri): String = runCatching {
     val ps4 = Ps4Repo.active()
 
     fun finish(r: Pair<ThemeBuilt?, String?>) { pending = r.first; error = r.second; busy = false }
-    val pkgPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) { busy = true; error = null; scope.launch { finish(ThemeStore.fromPkg(ctx, uri, displayName(ctx, uri))) } }
-    }
-    val imgPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) { busy = true; error = null; scope.launch { finish(ThemeStore.fromImage(ctx, uri, displayName(ctx, uri))) } }
+    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) { busy = true; error = null; scope.launch { finish(ThemeStore.fromFile(ctx, uri, displayName(ctx, uri))) } }
     }
 
     LazyColumn(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(vertical = 12.dp)) {
@@ -120,32 +138,32 @@ private fun displayName(ctx: Context, uri: Uri): String = runCatching {
         item { Panel {
             SectionTitle(tr("Add a theme", "إضافة ثيم"))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilledTonalButton(enabled = !busy, onClick = { pkgPicker.launch(arrayOf("*/*")) }) { Ico(R.drawable.ic_package, 18.dp); Spacer(Modifier.width(6.dp)); Lbl(tr("From a theme .pkg", "من ملف ثيم .pkg")) }
-                FilledTonalButton(enabled = !busy, onClick = { imgPicker.launch(arrayOf("image/*")) }) { Ico(R.drawable.ic_file, 18.dp); Spacer(Modifier.width(6.dp)); Lbl(tr("From a picture", "من صورة")) }
+                FilledTonalButton(enabled = !busy, onClick = { filePicker.launch(arrayOf("*/*")) }) { Ico(R.drawable.ic_package, 18.dp); Spacer(Modifier.width(6.dp)); Lbl(tr("From a theme file (.rar .zip .pkg or picture)", "من ملف ثيم (.rar .zip .pkg أو صورة)")) }
                 FilledTonalButton(enabled = !busy && ps4 != null, onClick = { showScan = true }) { Ico(R.drawable.ic_console, 18.dp); Spacer(Modifier.width(6.dp)); Lbl(tr("Find on my PS4", "بحث في الـPS4")) }
             }
             if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            Dim(tr("Most faithful: a screenshot of the PS4 home screen with the theme applied (PS4 captures can be saved to the phone from the PS4 information screen), then choose it with \"From a picture\".",
-                "الأدق: لقطة شاشة للواجهة الرئيسية في الـPS4 والثيم مطبّق (يمكن حفظ لقطات الـPS4 على الهاتف من شاشة معلومات PS4)، ثم اخترها بـ«من صورة»."))
+            Dim(tr("Choose the theme pack exactly as downloaded (.rar or .zip with the .pkg and its preview picture): the app reads the package and cuts the real wallpaper out of the preview picture.",
+                "اختر حزمة الثيم كما نزّلتها (.rar أو .zip فيها ملف .pkg وصورة المعاينة): يقرأ التطبيق الحزمة ويقصّ الخلفية الحقيقية من صورة المعاينة."))
         } }
         pending?.let { b ->
             item(key = "review") { Panel {
                 SectionTitle(tr("Review", "مراجعة"))
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Thumb(b.thumb, 72)
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        OutlinedTextField(b.profile.name, { pending = ThemeBuilt(b.profile.copy(name = it), b.thumb, b.info) }, singleLine = true, label = { Text(tr("Name", "الاسم")) }, modifier = Modifier.fillMaxWidth())
-                        if (b.info.isNotBlank()) Dim(b.info, maxLines = 2)
-                    }
+                    b.wall?.let { Image(it.asImageBitmap(), null, Modifier.height(72.dp).aspectRatio(16f / 9f).clip(RoundedCornerShape(6.dp)), contentScale = ContentScale.Crop) }
+                    b.func?.let { Image(it.asImageBitmap(), null, Modifier.height(72.dp).aspectRatio(16f / 9f).clip(RoundedCornerShape(6.dp)), contentScale = ContentScale.Crop) }
                 }
+                OutlinedTextField(b.profile.name, { pending = b.with(b.profile.copy(name = it)) }, singleLine = true, label = { Text(tr("Name", "الاسم")) }, modifier = Modifier.fillMaxWidth())
+                if (b.info.isNotBlank()) Dim(b.info, maxLines = 3)
                 Dim(tr("Accent colour (tap another colour to change it):", "اللون الأساسي (اضغط لونًا آخر لتغييره):"))
-                Swatches(b.profile) { c -> pending = ThemeBuilt(ThemeStore.withPrimary(b.profile, c), b.thumb, b.info) }
+                Swatches(b.profile) { c -> pending = b.with(ThemeStore.withPrimary(b.profile, c)) }
                 if (b.profile.mono) Dim(tr("This picture has almost no colour, so the scheme is neutral.", "هذه الصورة بلا ألوان تقريبًا، لذلك نظام الألوان محايد."))
-                ThemePreview(b.profile)
+                LookOptions(b.profile) { pending = b.with(it) }
+                ThemePreview(b.profile, b.wall)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(enabled = b.profile.name.isNotBlank(), onClick = { ThemeStore.save(b.profile, b.thumb, true); pending = null }) { Lbl(tr("Save and use", "حفظ واستخدام")) }
-                    OutlinedButton(enabled = b.profile.name.isNotBlank(), onClick = { ThemeStore.save(b.profile, b.thumb, false); pending = null }) { Lbl(tr("Save only", "حفظ فقط")) }
+                    Button(enabled = b.profile.name.isNotBlank(), onClick = { scope.launch { withContext(Dispatchers.IO) { ThemeStore.save(b, true) }; pending = null } }) { Lbl(tr("Save and use", "حفظ واستخدام")) }
+                    OutlinedButton(enabled = b.profile.name.isNotBlank(), onClick = { scope.launch { withContext(Dispatchers.IO) { ThemeStore.save(b, false) }; pending = null } }) { Lbl(tr("Save only", "حفظ فقط")) }
                     TextButton(onClick = { pending = null }) { Lbl(tr("Discard", "تجاهل")) }
                 }
             } }
@@ -175,7 +193,16 @@ private fun displayName(ctx: Context, uri: Uri): String = runCatching {
                 }
             }
         }
-        active?.let { a -> item(key = "preview") { Column(Modifier.fillMaxWidth(),verticalArrangement = Arrangement.spacedBy(6.dp)) { Dim(tr("The app now looks like this:", "يبدو التطبيق الآن هكذا:")); ThemePreview(a) } } }
+        active?.let { a ->
+            item(key = "options") { Panel {
+                SectionTitle(tr("Look of \"${a.name}\"", "مظهر «${a.name}»"))
+                LookOptions(a) { n -> ThemeStore.update(a.id) { n } }
+            } }
+            item(key = "preview") {
+                val wb by produceState<Bitmap?>(null, a.id, a.wall) { value = if (a.wall) withContext(Dispatchers.IO) { ThemeStore.wallBitmap(a.id) } else null }
+                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) { Dim(tr("The app now looks like this:", "يبدو التطبيق الآن هكذا:")); ThemePreview(a, wb) }
+            }
+        }
     }
     if (showScan && ps4 != null) ScanSheet(ps4, onClose = { showScan = false }) { c ->
         showScan = false; busy = true; error = null
