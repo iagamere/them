@@ -18,19 +18,21 @@ object Store {
     lateinit var secure: SharedPreferences      // encrypted: PS4 profiles and download records
     val theme = mutableIntStateOf(0)            // 0 system, 1 light, 2 dark
     val dynamic = mutableStateOf(true)          // use the phone's own (Material You) colours
+    val accent = mutableIntStateOf(0)           // index into Accents.all, used when the phone's colours are off
 
     fun init(c: Context) {
         sp = c.getSharedPreferences("app", 0)
         val key = MasterKey.Builder(c).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build()
         secure = EncryptedSharedPreferences.create(c, "secure", key,
             EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV, EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM)
-        theme.intValue = sp.getInt("theme", 0); dynamic.value = sp.getBoolean("dynamic", true); Lang.mode = sp.getInt("lang", 0)
+        theme.intValue = sp.getInt("theme", 0); dynamic.value = sp.getBoolean("dynamic", true); accent.intValue = sp.getInt("accent", 0); Lang.mode = sp.getInt("lang", 0)
         Ps4Repo.load(); DownloadRepo.load()
     }
     fun settings() = Settings(sp.getInt("poll", 3), sp.getInt("timeout", 10), sp.getInt("stuck", 60), sp.getBoolean("notif", true))
     fun putInt(k: String, v: Int) = sp.edit().putInt(k, v).apply()
     fun setTheme(i: Int) { theme.intValue = i; putInt("theme", i) }
     fun setLang(i: Int) { Lang.mode = i; putInt("lang", i) }
+    fun setAccent(i: Int) { accent.intValue = i; putInt("accent", i) }
     fun setDynamic(b: Boolean) { dynamic.value = b; sp.edit().putBoolean("dynamic", b).apply() }
     fun nextNotifId(): Int { val n = sp.getInt("notifseq", 100) + 1; sp.edit().putInt("notifseq", n).apply(); return n }
 

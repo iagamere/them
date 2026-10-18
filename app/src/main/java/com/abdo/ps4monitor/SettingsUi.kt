@@ -12,7 +12,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -41,8 +44,6 @@ import kotlinx.coroutines.withContext
         item { Text(tr("Settings", "الإعدادات"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold) }
         item { NavRow(R.drawable.ic_console, tr("PS4 consoles", "أجهزة PS4"), tr("Add, edit and choose the active PS4", "إضافة وتعديل واختيار الجهاز النشط")) { nav.navigate("settings/ps4s") } }
         item { NavRow(R.drawable.ic_download, tr("ezRemote Server", "خادم ezRemote"), tr("Status, send the server to the PS4, download settings, log", "الحالة، إرسال السيرفر إلى الـPS4، إعدادات التحميل، السجل")) { nav.navigate("settings/server") } }
-        item { NavRow(R.drawable.ic_palette, tr("PS4 theme", "ثيم PS4"),
-            ThemeStore.active.value?.name?.let { tr("In use: $it", "مستخدم: $it") } ?: tr("Colour the app like one of your PS4 themes", "لوّن التطبيق مثل أحد ثيمات الـPS4")) { nav.navigate("settings/theme") } }
         item { Panel {
             SectionTitle(tr("Language", "اللغة"))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf(0 to tr("Phone", "الهاتف"), 1 to "English", 2 to "العربية").forEach { (i, t) -> FilterChip(Lang.mode == i, { Store.setLang(i) }, label = { Lbl(t) }) } }
@@ -51,6 +52,17 @@ import kotlinx.coroutines.withContext
             if (android.os.Build.VERSION.SDK_INT >= 31) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Column(Modifier.weight(1f)) { Text(tr("Use phone colours", "استخدام ألوان الهاتف")); Dim(tr("Follows your wallpaper / system accent colour", "يتبع لون الهاتف الأساسي")) }
                 Switch(Store.dynamic.value, { Store.setDynamic(it) })
+            }
+            if (!(android.os.Build.VERSION.SDK_INT >= 31 && Store.dynamic.value)) {
+                Text(tr("App colour", "لون التطبيق"))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Accents.all.forEachIndexed { i, a ->
+                        val sel = Store.accent.intValue == i
+                        Box(Modifier.size(40.dp).clip(CircleShape).background(Color(a.dark.first)).border(if (sel) 3.dp else 1.dp, if (sel) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outlineVariant, CircleShape)
+                            .clickable { Store.setAccent(i) }, contentAlignment = Alignment.Center) { if (sel) Ico(R.drawable.ic_check, 20.dp, Color.Black) }
+                    }
+                }
+                Dim(tr(Accents.all[Store.accent.intValue.coerceIn(0, Accents.all.size - 1)].en, Accents.all[Store.accent.intValue.coerceIn(0, Accents.all.size - 1)].ar))
             }
         } }
         item { Panel {
